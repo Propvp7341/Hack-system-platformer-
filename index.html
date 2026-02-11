@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Covert hacking of the device platformer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root { --neon: #00f2ff; --accent: #ff0055; --bg: #050508; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: 'Orbitron', sans-serif; color: #fff; }
+        
+        /* Стили прелоадера */
+        #preloader {
+            position: fixed; inset: 0; z-index: 9999; background: var(--bg);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: opacity 1s ease;
+        }
+        .loader-bar { width: 200px; height: 2px; background: rgba(255,255,255,0.1); margin-top: 20px; position: relative; overflow: hidden; }
+        .loader-progress { position: absolute; left: 0; top: 0; height: 100%; background: var(--neon); width: 0%; transition: 0.3s; box-shadow: 0 0 10px var(--neon); }
+        .loader-text { font-size: 0.7rem; letter-spacing: 3px; color: var(--neon); text-transform: uppercase; }
+
+        #game-wrapper { position: relative; width: 100vw; height: 100vh; transition: filter 0.3s ease-in-out; filter: brightness(1); }
+        #game-wrapper.flash-dark { filter: brightness(0); }
+
+        .glitch-death { animation: death-shake 0.2s infinite; filter: contrast(2) hue-rotate(90deg) brightness(1.5) !important; }
+        @keyframes death-shake {
+            0% { transform: translate(0); }
+            25% { transform: translate(-10px, 10px); }
+            50% { transform: translate(10px, -10px); }
+            75% { transform: translate(-5px, -5px); }
+            100% { transform: translate(5px, 5px); }
+        }
+
+        canvas { display: block; width: 100%; height: 100%; position: absolute; z-index: 1; }
+        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(15px); transition: 0.5s; background: rgba(5, 5, 8, 0.95); }
+        
+        #secret-intro { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        .hacking-phrase { font-size: clamp(1rem, 4vw, 2rem); color: var(--neon); text-transform: uppercase; letter-spacing: 5px; text-align: center; animation: glitch-intro 0.2s infinite, zoom-in 3s forwards; text-shadow: 0 0 15px var(--neon); }
+        @keyframes zoom-in { 0% { transform: scale(0.8); opacity: 0; filter: blur(10px); } 20% { opacity: 1; filter: blur(0px); } 80% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0; transform: scale(1.2); } }
+        @keyframes glitch-intro { 0% { transform: translate(0); } 20% { transform: translate(-2px, 2px); } 40% { transform: translate(-2px, -2px); filter: hue-rotate(90deg); } 60% { transform: translate(2px, 2px); } 80% { transform: translate(2px, -2px); } 100% { transform: translate(0); } }
+
+        h1 { font-size: clamp(1.2rem, 5vw, 2.2rem); font-weight: 900; letter-spacing: 5px; margin-bottom: 40px; color: #fff; text-shadow: 0 0 20px var(--neon); text-align: center; }
+        .game-btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 16px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; cursor: pointer; transition: 0.3s; border-radius: 4px; text-align: center; width: 280px; margin-bottom: 10px; }
+        .game-btn:active:not(.locked) { background: #fff; color: #000; }
+        .locked { opacity: 0.2; cursor: not-allowed; filter: grayscale(1); }
+
+        .glitch-active { animation: glitch-shake 0.15s infinite; }
+        @keyframes glitch-shake { 0% { transform: translate(0); filter: hue-rotate(0deg); } 50% { transform: translate(-5px, 3px); filter: hue-rotate(180deg) brightness(1.5); } 100% { transform: translate(5px, -3px); filter: hue-rotate(0deg); } }
+
+        #console-container { width: 80%; max-width: 800px; font-family: monospace; color: var(--neon); line-height: 1.6; font-size: 1.1rem; text-shadow: 0 0 5px var(--neon); }
+        .reset-link { margin-top: 30px; font-size: 0.6rem; color: var(--accent); cursor: pointer; opacity: 0.5; border: none; background: none; letter-spacing: 2px; }
+        .hidden { display: none !important; }
+
+        #top-btns { position: absolute; top: 20px; right: 20px; z-index: 110; display: flex; gap: 20px; }
+        .icon-btn { font-size: 1.8rem; cursor: pointer; color: var(--neon); text-shadow: 0 0 10px var(--neon); transition: 0.3s; }
+        #settings-btn { animation: rotate-gear 15s infinite linear; }
+        @keyframes rotate-gear { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        .modal-panel {
+            position: absolute; width: 280px; background: rgba(10, 10, 15, 0.95); border: 1px solid var(--neon);
+            border-radius: 15px; padding: 20px; z-index: 1000; box-shadow: 0 0 30px rgba(0, 242, 255, 0.2);
+            backdrop-filter: blur(20px); display: none; flex-direction: column; gap: 15px;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+        }
+        .setting-row { display: flex; flex-direction: column; gap: 8px; }
+        .setting-label { font-size: 0.65rem; letter-spacing: 2px; color: var(--neon); text-transform: uppercase; }
+        input[type=range] { appearance: none; width: 100%; background: rgba(255,255,255,0.1); height: 4px; outline: none; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; background: var(--neon); cursor: pointer; border-radius: 50%; box-shadow: 0 0 8px var(--neon); }
+        
+        #countdown-overlay {
+            position: absolute; inset: 0; display: none; justify-content: center; align-items: center;
+            z-index: 200; pointer-events: none; font-size: 8rem; font-weight: 900; color: var(--neon);
+            text-shadow: 0 0 30px var(--neon);
+        }
+    </style>
+</head>
+<body>
+
+<div id="preloader">
+    <div class="loader-text" id="loader-status">LOADING SYSTEM...</div>
+    <div class="loader-bar"><div class="loader-progress" id="loader-progress"></div></div>
+</div>
+
+<audio id="menuMusic" loop preload="auto">
+    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3" type="audio/mpeg">
+</audio>
+
+<div id="secret-intro">
+    <div class="hacking-phrase">HackingSecret<br>square device hacking</div>
+</div>
+
+<div id="game-wrapper">
+    <div id="top-btns">
+        <div id="pause-btn" class="icon-btn hidden" onclick="togglePause()">||</div>
+        <div id="settings-btn" class="icon-btn" onclick="toggleSettings()">⚙</div>
+    </div>
+
+    <div id="settings-panel" class="modal-panel">
+        <h2 style="font-size: 0.9rem; text-align: center; margin: 0 0 10px 0; color: #fff; letter-spacing: 3px;">SYSTEM_CFG</h2>
+        <div class="setting-row">
+            <div class="setting-label">VOLUME: <span id="vol-val">50</span>%</div>
+            <input type="range" id="vol-slider" min="0" max="100" value="50" oninput="updateSettings()">
+        </div>
+        <div class="setting-row">
+            <div class="setting-label">GRAPHICS: <span id="gfx-val">HIGH</span></div>
+            <input type="range" id="gfx-slider" min="0" max="1" value="1" oninput="updateSettings()">
+        </div>
+        <div class="game-btn" style="width:100%; font-size:0.6rem; margin-top:10px;" onclick="toggleSettings()">[ CLOSE ]</div>
+    </div>
+
+    <div id="pause-menu" class="modal-panel">
+        <h2 style="font-size: 1.2rem; text-align: center; color: var(--neon); letter-spacing: 5px;">PAUSED</h2>
+        <div class="game-btn" style="width:100%;" onclick="resumeGame()">RESUME</div>
+        <div class="game-btn" style="width:100%; background:rgba(255,0,85,0.1); border-color:var(--accent);" onclick="backToMenu()">QUIT</div>
+    </div>
+
+    <div id="countdown-overlay">3</div>
+
+    <div id="splash" class="overlay">
+        <div style="font-size: 1.5rem; letter-spacing: 10px; color: var(--neon);">WINCHIS GAMES</div>
+        <div style="margin-top: 50px; display: flex; flex-direction: column; gap: 10px;">
+            <div class="game-btn" onclick="executeWithFade(() => setLang('ru'))">RU</div>
+            <div class="game-btn" onclick="executeWithFade(() => setLang('en'))">EN</div>
+        </div>
+    </div>
+
+    <div id="target-screen" class="overlay hidden">
+        <h1 id="target-title">SELECT TARGET DEVICE</h1>
+        <div class="game-btn" onclick="executeWithFade(() => setTarget('Android'))">ANDROID OS</div>
+        <div class="game-btn" onclick="executeWithFade(() => setTarget('iOS'))">APPLE iOS</div>
+        <div class="game-btn" onclick="executeWithFade(() => setTarget('Windows'))">WINDOWS PC</div>
+        <div class="game-btn" onclick="executeWithFade(() => setTarget('macOS'))">APPLE macOS</div>
+        <div class="game-btn" onclick="executeWithFade(() => setTarget('Kali Linux'))">KALI LINUX</div>
+    </div>
+
+    <div id="cutscene-screen" class="overlay hidden">
+        <div id="console-container"></div>
+        <div class="game-btn" id="contBtn" style="display: none; margin-top: 40px; min-width: 200px;" onclick="executeWithFade(() => closeCutscene())">PROCEED</div>
+    </div>
+
+    <div id="menu" class="overlay hidden">
+        <div class="menu-container" style="display:flex; flex-direction:column; width:90%; max-width:500px; align-items:center;">
+            <h1>COVERT HACKING</h1>
+            <div id="btn-l1" class="game-btn" onclick="executeWithFade(() => init('l1'))" style="margin-bottom:10px; border-left:4px solid var(--neon);">NODE_01: FIREWALL</div>
+            <div id="btn-l2" class="game-btn" onclick="executeWithFade(() => init('l2'))" style="margin-bottom:10px; border-left:4px solid #bd00ff;">NODE_02: GRAVITY</div>
+            <div id="btn-l3" class="game-btn" onclick="executeWithFade(() => init('l3'))" style="margin-bottom:10px; border-left:4px solid #ffea00;">NODE_03: CRYPTO</div>
+            <div id="btn-l4" class="game-btn" onclick="executeWithFade(() => init('l4'))" style="margin-bottom:10px; border-left:4px solid #ff0055;">NODE_04: KERNEL</div>
+            <div id="btn-l5" class="game-btn" onclick="executeWithFade(() => init('l5'))" style="margin-bottom:10px; border-left:4px solid #ff0000;">NODE_05: CORE</div>
+            <button class="reset-link" onclick="executeWithFade(() => resetProgress())">[ SYSTEM_RESET ]</button>
+        </div>
+    </div>
+
+    <div id="death-screen" class="overlay hidden">
+        <h1 style="color: var(--accent)">CONNECTION LOST</h1>
+        <div class="game-btn" onclick="executeWithFade(() => retryLevel())">RE-ESTABLISH LINK</div>
+        <div class="game-btn" onclick="executeWithFade(() => backToMenu())" style="background: rgba(255,255,255,0.01); border-color: rgba(255,255,255,0.05); font-size: 0.6rem;">[ RETURN_TO_MENU ]</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<audio id="audioPlayer" loop preload="auto"></audio>
+
+<script>
+    let cfg = { vol: 0.5, gfx: 1 };
+    let isPaused = false;
+    let inCountdown = false;
+
+    // Пул аудио объектов
+    const audioCache = {};
+    const levelMusic = {
+        l1: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+        l2: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+        l3: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+        l4: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+        l5: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3"
+    };
+
+    // --- ЛОГИКА ЗАГРУЗКИ ---
+    let assetsLoaded = 0;
+    const totalAssets = Object.keys(levelMusic).length + 2; // Музыка + Меню + Шрифты
+
+    function assetDone() {
+        assetsLoaded++;
+        const progress = (assetsLoaded / totalAssets) * 100;
+        document.getElementById('loader-progress').style.width = progress + '%';
+        if(assetsLoaded >= totalAssets) {
+            setTimeout(() => {
+                const preloader = document.getElementById('preloader');
+                preloader.style.opacity = '0';
+                setTimeout(() => preloader.remove(), 1000);
+            }, 500);
+        }
+    }
+
+    // Предзагрузка музыки
+    Object.keys(levelMusic).forEach(key => {
+        const a = new Audio();
+        a.addEventListener('canplaythrough', assetDone, {once: true});
+        a.src = levelMusic[key];
+        a.loop = true;
+        a.preload = "auto";
+        audioCache[key] = a;
+    });
+
+    const menuMusic = document.getElementById('menuMusic');
+    menuMusic.addEventListener('canplaythrough', assetDone, {once: true});
+    
+    // Проверка загрузки шрифтов
+    document.fonts.ready.then(assetDone);
+    // -----------------------
+
+    const synth = new (window.AudioContext || window.webkitAudioContext)();
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            if(state.currentLvlId) audioCache[state.currentLvlId].pause();
+            menuMusic.pause();
+        } else {
+            if (state.active && !isPaused && !inCountdown) audioCache[state.currentLvlId].play().catch(()=>{});
+            else if (!state.active) menuMusic.play().catch(()=>{});
+        }
+    });
+
+    function toggleSettings() {
+        const panel = document.getElementById('settings-panel');
+        panel.style.display = (panel.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function togglePause() {
+        if (!state.active || inCountdown) return;
+        isPaused = true;
+        audioCache[state.currentLvlId].pause();
+        document.getElementById('pause-menu').style.display = 'flex';
+    }
+
+    function resumeGame() {
+        document.getElementById('pause-menu').style.display = 'none';
+        startCountdown(() => {
+            isPaused = false;
+            audioCache[state.currentLvlId].play().catch(()=>{});
+        });
+    }
+
+    function startCountdown(onDone) {
+        inCountdown = true;
+        const countOverlay = document.getElementById('countdown-overlay');
+        countOverlay.style.display = 'flex';
+        let counts = [3, 2, 1, 'GO!'];
+        let i = 0;
+
+        const timer = setInterval(() => {
+            countOverlay.innerText = counts[i];
+            playBeep(400 + (i * 100), 0.1, 0.1);
+            i++;
+            if (i > counts.length) {
+                clearInterval(timer);
+                countOverlay.style.display = 'none';
+                inCountdown = false;
+                onDone();
+            }
+        }, 800);
+    }
+
+    function updateSettings() {
+        cfg.vol = document.getElementById('vol-slider').value / 100;
+        cfg.gfx = parseInt(document.getElementById('gfx-slider').value);
+        document.getElementById('vol-val').innerText = Math.round(cfg.vol * 100);
+        document.getElementById('gfx-val').innerText = cfg.gfx === 1 ? "HIGH" : "LOW";
+        menuMusic.volume = 0.05 * (cfg.vol * 2); 
+        Object.values(audioCache).forEach(a => a.volume = cfg.vol);
+    }
+
+    function executeWithFade(action) {
+        if (synth.state === 'suspended') synth.resume();
+        const wrapper = document.getElementById('game-wrapper');
+        const clickOsc = synth.createOscillator();
+        const clickGain = synth.createGain();
+        clickOsc.type = 'sine';
+        clickOsc.frequency.setValueAtTime(800, synth.currentTime);
+        clickOsc.frequency.exponentialRampToValueAtTime(10, synth.currentTime + 0.1);
+        clickGain.gain.setValueAtTime(0.15 * cfg.vol, synth.currentTime);
+        clickGain.gain.linearRampToValueAtTime(0, synth.currentTime + 0.1);
+        clickOsc.connect(clickGain);
+        clickGain.connect(synth.destination);
+        clickOsc.start();
+        clickOsc.stop(synth.currentTime + 0.1);
+        wrapper.classList.add('flash-dark');
+        setTimeout(() => {
+            action();
+            wrapper.classList.remove('flash-dark');
+        }, 300);
+    }
+
+    setTimeout(() => {
+        const intro = document.getElementById('secret-intro');
+        if(intro) {
+            intro.style.transition = "1s";
+            intro.style.opacity = "0";
+            setTimeout(() => intro.remove(), 1000);
+        }
+    }, 3000);
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    menuMusic.volume = 0.05; 
+
+    let unlockedLevel = parseInt(localStorage.getItem('neonCoreProgress')) || 1;
+    let lang = localStorage.getItem('neonLang') || 'en';
+    let targetOS = "DEVICE";
+
+    const state = { active: false, worldX: 0, speed: 0, theme: '#00f2ff', currentLvlId: '', trail: [], particles: [] };
+    const player = { x: 120, y: 0, size: 40, vy: 0, grav: 0.8, rot: 0, ground: false };
+
+    function getLoc() {
+        return {
+            ru: {
+                target: "ВЫБЕРИТЕ УСТРОЙСТВО ЖЕРТВЫ",
+                l0: `ИНИЦИАЛИЗАЦИЯ... \nОБНАРУЖЕНО УСТРОЙСТВО: [${targetOS}] \nЗАДАЧА: ПОЛНЫЙ ВЗЛОМ СИСТЕМЫ. \n\nНАЖМИТЕ ДЛЯ ВХОДА...`,
+                l1: `УЗЕЛ 01 ВЗЛОМАН. \nПериметр [${targetOS}] пройден.`,
+                l2: `УЗЕЛ 02 ВЗЛОМАН. \nГравитационные фильтры [${targetOS}] обойдены.`,
+                l3: `УЗЕЛ 03 ВЗЛОМАН. \nКриптографический ключ [${targetOS}] получен.`,
+                l4: `УЗЕЛ 04 ВЗЛОМАН. \nKernel-защита [${targetOS}] уничтожена.`,
+                l5: `СИНГУЛЯРНОСТЬ ДОСТИГНУТА. \nУСТРОЙСТВО [${targetOS}] ПОЛНОСТЬЮ ПОД КОНТРОЛЕМ.`,
+                reset: "СБРОСИТЬ ВСЁ?", proceed: "ПРОДОЛЖИТЬ"
+            },
+            en: {
+                target: "SELECT TARGET DEVICE",
+                l0: `INITIALIZING... \nDEVICE DETECTED: [${targetOS}] \nOBJECTIVE: FULL SYSTEM BREACH. \n\nPRESS TO START...`,
+                l1: `NODE 01 BREACHED. \n[${targetOS}] perimeter cleared.`,
+                l2: `NODE 02 BREACHED. \n[${targetOS}] gravity filters bypassed.`,
+                l3: `NODE 03 BREACHED. \n[${targetOS}] cryptographic key acquired.`,
+                l4: `NODE 04 BREACHED. \n[${targetOS}] kernel protection destroyed.`,
+                l5: `SINGULARITY REACHED. \n[${targetOS}] DEVICE FULLY CONTROLLED.`,
+                reset: "RESET ALL?", proceed: "PROCEED"
+            }
+        };
+    }
+
+    function playBeep(freq, dur, vol, type='square') {
+        const osc = synth.createOscillator();
+        const g = synth.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, synth.currentTime);
+        g.gain.setValueAtTime(vol * cfg.vol, synth.currentTime);
+        osc.connect(g); g.connect(synth.destination);
+        osc.start(); osc.stop(synth.currentTime + dur);
+    }
+
+    function playGlitchSound() {
+        for(let i=0; i<5; i++) {
+            playBeep(50 + Math.random()*200, 0.1, 0.15, 'sawtooth');
+            playBeep(1000 + Math.random()*2000, 0.05, 0.05, 'square');
+        }
+    }
+
+    function typeText(text, callback) {
+        const container = document.getElementById('console-container');
+        container.innerHTML = "";
+        let i = 0;
+        const screen = document.getElementById('cutscene-screen');
+        screen.classList.remove('hidden');
+        const interval = setInterval(() => {
+            if (i < text.length) {
+                const char = text.charAt(i);
+                container.innerHTML += char === "\n" ? "<br>" : char;
+                if (char !== " " && char !== "\n") playBeep(200 + Math.random()*500, 0.05, 0.02);
+                if (Math.random() > 0.96) {
+                    screen.classList.add('glitch-active');
+                    playBeep(100, 0.1, 0.05, 'sawtooth');
+                    setTimeout(() => screen.classList.remove('glitch-active'), 100);
+                }
+                i++;
+            } else { clearInterval(interval); callback(); }
+        }, 40);
+    }
+
+    function setLang(l) {
+        updateSettings();
+        menuMusic.play().catch(()=>{}); 
+        lang = l; localStorage.setItem('neonLang', l);
+        document.getElementById('splash').classList.add('hidden');
+        document.getElementById('target-title').innerText = getLoc()[lang].target;
+        document.getElementById('target-screen').classList.remove('hidden');
+    }
+
+    function setTarget(os) {
+        targetOS = os;
+        document.getElementById('target-screen').classList.add('hidden');
+        showCutscene(getLoc()[lang].l0, () => {
+            document.getElementById('menu').classList.remove('hidden');
+            updateMenu();
+        });
+    }
+
+    function showCutscene(text, onDone) {
+        document.getElementById('menu').classList.add('hidden');
+        document.getElementById('contBtn').style.display = "none";
+        document.getElementById('contBtn').innerText = getLoc()[lang].proceed;
+        typeText(text, () => {
+            document.getElementById('contBtn').style.display = "block";
+            window.nextStep = onDone;
+        });
+    }
+
+    function closeCutscene() {
+        document.getElementById('cutscene-screen').classList.add('hidden');
+        if (window.nextStep) window.nextStep();
+    }
+
+    function backToMenu() {
+        state.active = false; isPaused = false; inCountdown = false;
+        if(state.currentLvlId) audioCache[state.currentLvlId].pause();
+        menuMusic.play().catch(()=>{});
+        document.getElementById('death-screen').classList.add('hidden');
+        document.getElementById('pause-menu').style.display = 'none';
+        document.getElementById('menu').classList.remove('hidden');
+        document.getElementById('settings-btn').style.display = "block";
+        document.getElementById('pause-btn').classList.add('hidden');
+    }
+
+    function resetProgress() {
+        if(confirm(getLoc()[lang].reset)) { localStorage.clear(); location.reload(); }
+    }
+
+    function updateMenu() {
+        for(let i=1; i<=5; i++) document.getElementById('btn-l' + i).classList.toggle('locked', i > unlockedLevel);
+    }
+
+    const levelDefs = {
+        l1: { s: 7.5, g: 0.8, color: '#00f2ff', music: levelMusic.l1, m: 40 },
+        l2: { s: 8.5, g: 0.45, color: '#bd00ff', music: levelMusic.l2, m: 50 },
+        l3: { s: 11, g: 0.85, color: '#ffea00', music: levelMusic.l3, m: 60 },
+        l4: { s: 15, g: 0.9, color: '#ff0055', music: levelMusic.l4, m: 80 },
+        l5: { s: 19, g: 1.0, color: '#ff0000', music: levelMusic.l5, m: 100 }
+    };
+
+    function init(id) {
+        const l = levelDefs[id];
+        if (parseInt(id.charAt(1)) > unlockedLevel) return;
+        menuMusic.pause();
+        isPaused = false; inCountdown = false;
+        document.getElementById('settings-btn').style.display = "none";
+        document.getElementById('settings-panel').style.display = "none";
+        document.getElementById('pause-btn').classList.remove('hidden');
+        state.currentLvlId = id; state.speed = l.s; state.theme = l.color; 
+        state.map = genMap(l.m); player.grav = l.g; state.active = true; state.trail = []; state.particles = [];
+        document.getElementById('menu').classList.add('hidden');
+        state.worldX = 0; state.finishX = state.map.find(o=>o.t==='f').x;
+        const track = audioCache[id];
+        track.currentTime = 0;
+        track.volume = cfg.vol;
+        track.play().catch(()=>{});
+        loop();
+    }
+
+    function genMap(len) {
+        let m = [];
+        for(let i=1; i<len; i++) {
+            if(i%3===0) {
+                let type = Math.random()>0.4?'s':'p';
+                let x = i*450 + Math.random()*100;
+                m.push({x: x, t: type});
+                if(type === 'p') m.push({x: x + 50, t: 's'});
+            }
+        }
+        m.push({x: len*450+1000, t:'f'});
+        return m;
+    }
+
+    function end(win) {
+        state.active = false; 
+        if(state.currentLvlId) audioCache[state.currentLvlId].pause();
+        document.getElementById('pause-btn').classList.add('hidden');
+        if(win) {
+            let num = parseInt(state.currentLvlId.charAt(1));
+            if(num === unlockedLevel && unlockedLevel < 5) {
+                unlockedLevel++; localStorage.setItem('neonCoreProgress', unlockedLevel);
+            }
+            showCutscene(getLoc()[lang]['l' + num], () => {
+                menuMusic.play().catch(()=>{});
+                document.getElementById('menu').classList.remove('hidden');
+                document.getElementById('settings-btn').style.display = "block";
+                updateMenu();
+            });
+        } else {
+            document.getElementById('game-wrapper').classList.add('glitch-death');
+            playGlitchSound();
+            setTimeout(() => {
+                document.getElementById('game-wrapper').classList.remove('glitch-death');
+                document.getElementById('death-screen').classList.remove('hidden');
+            }, 400);
+        }
+    }
+
+    function retryLevel() { document.getElementById('death-screen').classList.add('hidden'); init(state.currentLvlId); }
+
+    window.addEventListener('mousedown', () => { 
+        if(state.active && player.ground && !isPaused && !inCountdown) { 
+            player.vy = -15.5; 
+            player.ground = false; 
+        } 
+    });
+    window.addEventListener('touchstart', (e) => { 
+        if(state.active && player.ground && !isPaused && !inCountdown) { 
+            e.preventDefault(); 
+            player.vy = -15.5; 
+            player.ground = false; 
+        } 
+    }, {passive:false});
+
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; player.y = canvas.height-120-player.size; }
+    window.addEventListener('resize', resize); resize();
+
+    function loop() {
+        if(!state.active) return;
+        if(!isPaused && !inCountdown) {
+            player.vy += player.grav; player.y += player.vy;
+            const floorY = canvas.height - 120;
+            if(cfg.gfx === 1) {
+                state.trail.push({y: player.y, r: player.rot});
+                if(state.trail.length > 5) state.trail.shift();
+            } else { state.trail = []; }
+            if(player.y + player.size >= floorY - 2) {
+                player.y = floorY - player.size; player.vy = 0; player.ground = true; player.rot = Math.round(player.rot/90)*90;
+                if(cfg.gfx === 1) {
+                    state.particles.push({x: player.x, y: floorY, vx: -Math.random()*5, vy: -Math.random()*2, l: 1});
+                }
+            } else { player.ground = false; player.rot += state.speed * 0.75; }
+            state.worldX += state.speed;
+            state.map.forEach(obj => {
+                let rx = obj.x - state.worldX + player.x;
+                if(rx < -200 || rx > canvas.width + 200) return;
+                if(obj.t === 's' && player.x < rx + 30 && player.x + player.size > rx + 10 && player.y + player.size > floorY - 40) end(false);
+                if(obj.t === 'p') {
+                    const platY = floorY - 120;
+                    const platW = 140;
+                    const platH = 12;
+                    if (player.x + player.size > rx && player.x < rx + platW && player.y + player.size > platY && player.y < platY + platH) {
+                        if (player.vy >= 0 && (player.y + player.size - player.vy) <= platY + 5) {
+                            player.y = platY - player.size; player.vy = 0; player.ground = true;
+                        } else { end(false); }
+                    }
+                }
+            });
+            if(state.worldX >= state.finishX) end(true);
+        }
+        draw(); requestAnimationFrame(loop);
+    }
+
+    function draw() {
+        ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const floorY = canvas.height - 120;
+        ctx.strokeStyle = state.theme; ctx.globalAlpha = 0.1;
+        for(let i=0; i<canvas.width; i+=60) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+        ctx.globalAlpha = 1; ctx.lineWidth = 2; 
+        if(cfg.gfx === 1) { ctx.shadowBlur = 15; ctx.shadowColor = state.theme; }
+        ctx.beginPath(); ctx.moveTo(0, floorY); ctx.lineTo(canvas.width, floorY); ctx.stroke();
+        state.particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy; p.l -= 0.02;
+            ctx.globalAlpha = p.l; ctx.fillStyle = state.theme; ctx.fillRect(p.x, p.y, 2, 2);
+            if(p.l <= 0) state.particles.splice(i, 1);
+        });
+        state.trail.forEach((t, i) => {
+            ctx.globalAlpha = i * 0.15;
+            ctx.save(); ctx.translate(player.x + player.size/2, t.y + player.size/2); ctx.rotate(t.r * Math.PI / 180);
+            ctx.strokeStyle = state.theme; ctx.strokeRect(-player.size/2, -player.size/2, player.size, player.size);
+            ctx.restore();
+        });
+        ctx.globalAlpha = 1;
+        ctx.save(); ctx.translate(player.x + player.size/2, player.y + player.size/2); ctx.rotate(player.rot * Math.PI / 180);
+        ctx.fillStyle = '#fff'; ctx.fillRect(-player.size/2, -player.size/2, player.size, player.size);
+        ctx.strokeStyle = state.theme; ctx.lineWidth = 4; ctx.strokeRect(-player.size/2, -player.size/2, player.size, player.size);
+        ctx.restore();
+        state.map.forEach(obj => {
+            let rx = obj.x - state.worldX + player.x;
+            if(rx < -200 || rx > canvas.width + 200) return;
+            if(obj.t === 's') { ctx.fillStyle = state.theme; ctx.beginPath(); ctx.moveTo(rx, floorY); ctx.lineTo(rx+20, floorY-40); ctx.lineTo(rx+40, floorY); ctx.fill(); }
+            else if(obj.t === 'p') { ctx.fillStyle = '#fff'; ctx.fillRect(rx, floorY - 120, 140, 12); }
+            else if(obj.t === 'f') { ctx.fillStyle = '#fff'; ctx.fillRect(rx, 0, 5, floorY); }
+        });
+        ctx.shadowBlur = 0;
+    }
+</script>
+</body>
+</html>
