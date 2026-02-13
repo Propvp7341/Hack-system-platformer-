@@ -177,27 +177,43 @@
         l5: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3"
     };
 
-    // --- ЛОГИКА ЗАГРУЗКИ ---
+    // --- ЛОГИКА ЗАГРУЗКИ (ОПТИМИЗИРОВАНО ДЛЯ iOS) ---
     let assetsLoaded = 0;
-    const totalAssets = Object.keys(levelMusic).length + 2; // Музыка + Меню + Шрифты
+    const totalAssets = Object.keys(levelMusic).length + 2; 
 
     function assetDone() {
         assetsLoaded++;
         const progress = (assetsLoaded / totalAssets) * 100;
         document.getElementById('loader-progress').style.width = progress + '%';
         if(assetsLoaded >= totalAssets) {
-            setTimeout(() => {
-                const preloader = document.getElementById('preloader');
-                preloader.style.opacity = '0';
-                setTimeout(() => preloader.remove(), 1000);
-            }, 500);
+            finishLoading();
         }
     }
+
+    function finishLoading() {
+        setTimeout(() => {
+            const preloader = document.getElementById('preloader');
+            if(preloader) {
+                preloader.style.opacity = '0';
+                setTimeout(() => preloader.remove(), 1000);
+            }
+        }, 500);
+    }
+
+    // Резервный таймер для iOS (если canplaythrough заблокирован)
+    setTimeout(() => {
+        if(assetsLoaded < totalAssets) {
+            console.log("Forcing load completion for iOS stability");
+            finishLoading();
+        }
+    }, 4000);
 
     // Предзагрузка музыки
     Object.keys(levelMusic).forEach(key => {
         const a = new Audio();
+        // На iOS события canplaythrough могут не срабатывать до взаимодействия
         a.addEventListener('canplaythrough', assetDone, {once: true});
+        a.addEventListener('error', assetDone, {once: true}); // Пропускаем ошибки
         a.src = levelMusic[key];
         a.loop = true;
         a.preload = "auto";
@@ -206,16 +222,26 @@
 
     const menuMusic = document.getElementById('menuMusic');
     menuMusic.addEventListener('canplaythrough', assetDone, {once: true});
+    menuMusic.addEventListener('error', assetDone, {once: true});
     
-    // Проверка загрузки шрифтов
     document.fonts.ready.then(assetDone);
-    // -----------------------
 
-    const synth = new (window.AudioContext || window.webkitAudioContext)();
+    // Web Audio Context initialization
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let synth; 
+
+    function initSynth() {
+        if (!synth) {
+            synth = new AudioContext();
+        }
+        if (synth.state === 'suspended') {
+            synth.resume();
+        }
+    }
 
     document.addEventListener("visibilitychange", () => {
         if (document.hidden) {
-            if(state.currentLvlId) audioCache[state.currentLvlId].pause();
+            if(state.currentLvlId && audioCache[state.currentLvlId]) audioCache[state.currentLvlId].pause();
             menuMusic.pause();
         } else {
             if (state.active && !isPaused && !inCountdown) audioCache[state.currentLvlId].play().catch(()=>{});
@@ -273,19 +299,23 @@
     }
 
     function executeWithFade(action) {
-        if (synth.state === 'suspended') synth.resume();
+        initSynth(); // Разблокировка звука на iOS
         const wrapper = document.getElementById('game-wrapper');
-        const clickOsc = synth.createOscillator();
-        const clickGain = synth.createGain();
-        clickOsc.type = 'sine';
-        clickOsc.frequency.setValueAtTime(800, synth.currentTime);
-        clickOsc.frequency.exponentialRampToValueAtTime(10, synth.currentTime + 0.1);
-        clickGain.gain.setValueAtTime(0.15 * cfg.vol, synth.currentTime);
-        clickGain.gain.linearRampToValueAtTime(0, synth.currentTime + 0.1);
-        clickOsc.connect(clickGain);
-        clickGain.connect(synth.destination);
-        clickOsc.start();
-        clickOsc.stop(synth.currentTime + 0.1);
+        
+        if(synth) {
+            const clickOsc = synth.createOscillator();
+            const clickGain = synth.createGain();
+            clickOsc.type = 'sine';
+            clickOsc.frequency.setValueAtTime(800, synth.currentTime);
+            clickOsc.frequency.exponentialRampToValueAtTime(10, synth.currentTime + 0.1);
+            clickGain.gain.setValueAtTime(0.15 * cfg.vol, synth.currentTime);
+            clickGain.gain.linearRampToValueAtTime(0, synth.currentTime + 0.1);
+            clickOsc.connect(clickGain);
+            clickGain.connect(synth.destination);
+            clickOsc.start();
+            clickOsc.stop(synth.currentTime + 0.1);
+        }
+
         wrapper.classList.add('flash-dark');
         setTimeout(() => {
             action();
@@ -339,6 +369,7 @@
     }
 
     function playBeep(freq, dur, vol, type='square') {
+        if(!synth) return;
         const osc = synth.createOscillator();
         const g = synth.createGain();
         osc.type = type; osc.frequency.setValueAtTime(freq, synth.currentTime);
@@ -410,7 +441,7 @@
 
     function backToMenu() {
         state.active = false; isPaused = false; inCountdown = false;
-        if(state.currentLvlId) audioCache[state.currentLvlId].pause();
+        if(state.currentLvlId && audioCache[state.currentLvlId]) audioCache[state.currentLvlId].pause();
         menuMusic.play().catch(()=>{});
         document.getElementById('death-screen').classList.add('hidden');
         document.getElementById('pause-menu').style.display = 'none';
@@ -448,9 +479,11 @@
         document.getElementById('menu').classList.add('hidden');
         state.worldX = 0; state.finishX = state.map.find(o=>o.t==='f').x;
         const track = audioCache[id];
-        track.currentTime = 0;
-        track.volume = cfg.vol;
-        track.play().catch(()=>{});
+        if(track) {
+            track.currentTime = 0;
+            track.volume = cfg.vol;
+            track.play().catch(()=>{});
+        }
         loop();
     }
 
@@ -470,7 +503,7 @@
 
     function end(win) {
         state.active = false; 
-        if(state.currentLvlId) audioCache[state.currentLvlId].pause();
+        if(state.currentLvlId && audioCache[state.currentLvlId]) audioCache[state.currentLvlId].pause();
         document.getElementById('pause-btn').classList.add('hidden');
         if(win) {
             let num = parseInt(state.currentLvlId.charAt(1));
@@ -509,7 +542,11 @@
         } 
     }, {passive:false});
 
-    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; player.y = canvas.height-120-player.size; }
+    function resize() { 
+        canvas.width = window.innerWidth; 
+        canvas.height = window.innerHeight; 
+        player.y = canvas.height-120-player.size; 
+    }
     window.addEventListener('resize', resize); resize();
 
     function loop() {
